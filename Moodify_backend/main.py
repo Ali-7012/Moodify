@@ -80,11 +80,11 @@ async def process_mood(payload: dict):
     user_prompt = payload.get("prompt", "Chill vibes").strip()
     user_prompt_lower = user_prompt.lower()
     
-    # Default title to the user's input prompt emotion
     derived_mood = user_prompt.title()
     playlist_query = user_prompt
     track_search_queries = [user_prompt]
 
+    # 1. AI Emotional Deciphering via Gemini
     if genai_client:
         try:
             response = genai_client.models.generate_content(
@@ -121,7 +121,7 @@ async def process_mood(payload: dict):
     seen_track_ids = set()
 
     try:
-        # 1. Search Organic Public Playlists (Returns only existing playlists matching the mood)
+        # 1. Search Organic Public Playlists
         playlist_results = sp_search.search(q=playlist_query, type='playlist', limit=6)
         playlists_obj = playlist_results.get('playlists') if isinstance(playlist_results, dict) else None
         playlists = playlists_obj.get('items', []) if isinstance(playlists_obj, dict) and playlists_obj.get('items') else []
@@ -151,9 +151,9 @@ async def process_mood(payload: dict):
                 "cover_image": cover_url
             })
 
-        # 2. Direct Track Search: Gather exactly 10 songs for behind-the-scenes playlist creation
+        # 2. Direct Track Search: Gather at least 10 unique tracks
         for term in track_search_queries:
-            track_results = sp_search.search(q=term, type='track', limit=6)
+            track_results = sp_search.search(q=term, type='track', limit=15)
             tracks_obj = track_results.get('tracks', {}) if isinstance(track_results, dict) else {}
             items = tracks_obj.get('items', []) if isinstance(tracks_obj, dict) else []
 
@@ -167,11 +167,26 @@ async def process_mood(payload: dict):
                     "spotify_uri": track.get('uri', ''),
                     "popularity": track.get('popularity', 0)
                 })
-                if len(recommended_tracks) >= 15:
-                    break
+
+        # Fallback safeguard: if keyword searches yield < 10 songs, search raw prompt
+        if len(recommended_tracks) < 10:
+            fallback_results = sp_search.search(q=user_prompt, type='track', limit=20)
+            tracks_obj = fallback_results.get('tracks', {}) if isinstance(fallback_results, dict) else {}
+            items = tracks_obj.get('items', []) if isinstance(tracks_obj, dict) else []
+
+            for track in items:
+                if not track or not isinstance(track, dict) or not track.get('id') or track['id'] in seen_track_ids:
+                    continue
+                seen_track_ids.add(track['id'])
+
+                recommended_tracks.append({
+                    "title": track.get('name', 'Untitled Track'),
+                    "spotify_uri": track.get('uri', ''),
+                    "popularity": track.get('popularity', 0)
+                })
 
         recommended_tracks.sort(key=lambda x: x.get('popularity', 0), reverse=True)
-        recommended_tracks = recommended_tracks[:10]  # Exactly 10 songs
+        recommended_tracks = recommended_tracks[:10]  # Guaranteed 10 songs
 
     except Exception as e:
         print(f"[ERROR] Spotify Search Error: {str(e)}")
