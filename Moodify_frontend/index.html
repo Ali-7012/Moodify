@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moodify - Dashboard & Playlist Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex flex-col">
+
+    <!-- Top Navigation -->
+    <header class="w-full bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="relative w-11 h-11 rounded-full bg-slate-900 border-2 border-green-500 flex items-center justify-center shadow-lg animate-spin-slow overflow-hidden">
+                <div class="absolute w-8 h-8 rounded-full border border-slate-700/80"></div>
+                <div class="absolute w-5 h-5 rounded-full border border-slate-700/80"></div>
+                <div class="absolute inset-0 vinyl-shine pointer-events-none"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-green-400 z-10 shadow-sm"></div>
+            </div>
+            <span class="text-xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500">
+                Moodify
+            </span>
+        </div>
+
+        <nav class="hidden md:flex items-center space-x-6 text-sm font-medium text-slate-300">
+            <a href="https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M" target="_blank" class="hover:text-green-400 transition">Top 100 Songs</a>
+            <a href="https://open.spotify.com/playlist/37i9dQZF1DX4WYPDfoIcd1" target="_blank" class="hover:text-green-400 transition">Chill Vibes</a>
+            <a href="https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP" target="_blank" class="hover:text-green-400 transition">Workout Hype</a>
+            <a href="https://open.spotify.com/playlist/37i9dQZF1DX7gIoKrx0gmb" target="_blank" class="hover:text-green-400 transition">Sad & Melancholy</a>
+        </nav>
+
+        <!-- Auth Container Targeted by app.js -->
+        <div id="authContainer">
+            <button onclick="linkSpotify()" class="group relative flex items-center space-x-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-full shadow-md overflow-hidden transition-all duration-300">
+                <div class="absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none transition-opacity duration-300"></div>
+                <img src="Spotify.png" alt="Spotify" class="w-6 h-6 z-10 object-contain drop-shadow-md">
+                <span class="text-white font-bold text-xs uppercase tracking-wider z-10 relative">Link Spotify</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex items-center justify-center p-6">
+        <div class="max-w-2xl w-full bg-slate-900 p-8 rounded-2xl shadow-2xl border border-slate-800">
+            
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-extrabold text-white">AI Music Curation</h1>
+                <p class="text-slate-400 mt-2 text-sm">Describe your feeling to find existing playlists or generate a custom mix.</p>
+            </div>
+
+            <!-- Input Form -->
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">How are you feeling right now?</label>
+                    <input id="moodPrompt" type="text" placeholder="e.g., Chill vibes, happy, energetic workout..." 
+                        onkeydown="if(event.key === 'Enter') generatePlaylist()"
+                        class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-white text-sm">
+                </div>
+                <button onclick="generatePlaylist()" id="submitBtn"
+                    class="w-full py-3 bg-green-500 hover:bg-green-600 text-slate-950 font-bold rounded-lg transition duration-200 text-sm">
+                    Generate Playlist
+                </button>
+            </div>
+
+            <!-- Results Section with Two Clearly Divided Sections -->
+            <div id="results" class="mt-8 hidden space-y-8">
+                
+                <!-- SECTION 1: Existing Curated Playlists -->
+                <div class="border-t border-slate-800 pt-6">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-green-400 mb-1">1. Existing Spotify Playlists</h2>
+                    <p class="text-xs text-slate-400 mb-4">Popular public playlists curated for this vibe:</p>
+                    <div id="existingPlaylistsList" class="space-y-3">
+                        <!-- Injected by app.js -->
+                    </div>
+                </div>
+
+                <!-- SECTION 2: AI Custom Mix -->
+                <div class="border-t border-slate-800 pt-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-green-400">2. Your AI Custom Mix</h2>
+                            <p class="text-xs text-slate-400">Derived Mood: <span id="moodOutput" class="text-white font-medium"></span></p>
+                        </div>
+                        <button onclick="saveToSpotify()" id="saveBtn" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-slate-950 font-bold text-xs rounded-lg transition shadow flex items-center space-x-1">
+                            <span>Save to My Spotify</span>
+                        </button>
+                    </div>
+                    
+                    <div id="trackList" class="space-y-3">
+                        <!-- Injected by app.js -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js" defer></script>
+</body>
+</html>

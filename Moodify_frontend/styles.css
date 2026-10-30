@@ -1,0 +1,13 @@
+@keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+    animation: spin-slow 6s linear infinite;
+}
+
+/* Glossy shine overlay for realistic vinyl look */
+.vinyl-shine {
+    background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 50%, rgba(255,255,255,0.1) 100%);
+}
