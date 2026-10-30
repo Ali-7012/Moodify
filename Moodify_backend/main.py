@@ -20,7 +20,6 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://moodify-pearl-sigma.vercel.app
 
 genai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-# Added explicit scopes for creating public and private playlists
 sp_oauth = SpotifyOAuth(
     client_id=SPOTIFY_CLIENT_ID,
     client_secret=SPOTIFY_CLIENT_SECRET,
@@ -84,32 +83,47 @@ async def process_mood(payload: dict):
     playlist_query = user_prompt
     track_search_queries = [user_prompt]
 
-    # 1. AI Emotional Deciphering via Gemini
+    # 1. AI Emotional Deciphering via Gemini (using active models)
     if genai_client:
-        try:
-            response = genai_client.models.generate_content(
-                model='gemini-1.5-flash',
-                contents=f"""
-                Deconstruct this user mood prompt: "{user_prompt}"
+        ai_response_text = None
+        for model_name in ['gemini-2.5-flash', 'gemini-2.0-flash']:
+            try:
+                response = genai_client.models.generate_content(
+                    model=model_name,
+                    contents=f"""
+                    Deconstruct this user mood prompt: "{user_prompt}"
 
-                Return a JSON object with strictly three keys:
-                1. "derived_mood": Clean title matching the exact user emotion/mood (1-3 words, e.g. "{user_prompt.title()}").
-                2. "playlist_query": 1-2 word query matching real Spotify public playlists.
-                3. "search_keywords": Array of 3-4 keywords to search individual songs directly.
+                    Return a JSON object with strictly three keys:
+                    1. "derived_mood": Clean title matching the exact user emotion/mood (1-3 words, e.g. "{user_prompt.title()}").
+                    2. "playlist_query": 1-2 word query matching real Spotify public playlists.
+                    3. "search_keywords": Array of 3-4 keywords to search individual songs directly.
 
-                Return ONLY valid JSON without markdown formatting.
-                """
-            )
-            raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-            ai_data = json.loads(raw_text)
-            derived_mood = ai_data.get("derived_mood", user_prompt.title())
-            playlist_query = ai_data.get("playlist_query", user_prompt)
-            track_search_queries = ai_data.get("search_keywords", [playlist_query])
-        except Exception as e:
-            print(f"[WARNING] Gemini parsing fallback: {str(e)}")
-            if user_prompt_lower in EMOTION_TAXONOMY:
-                derived_mood, playlist_query = EMOTION_TAXONOMY[user_prompt_lower]
-                track_search_queries = [playlist_query]
+                    Return ONLY valid JSON without markdown formatting.
+                    """
+                )
+                ai_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+                if ai_response_text:
+                    break
+            except Exception as e:
+                print(f"[WARNING] Gemini model '{model_name}' failed: {str(e)}")
+
+        if ai_response_text:
+            try:
+                ai_data = json.loads(ai_response_text)
+                derived_mood = ai_data.get("derived_mood", user_prompt.title())
+                playlist_query = ai_data.get("playlist_query", user_prompt)
+                
+                raw_keywords = ai_data.get("search_keywords", [playlist_query])
+                if isinstance(raw_keywords, list):
+                    track_search_queries = [str(k).strip() for k in raw_keywords if k]
+                else:
+                    track_search_queries = [str(playlist_query)]
+            except Exception as parse_err:
+                print(f"[WARNING] Gemini JSON parsing failed: {str(parse_err)}")
+
+    if not track_search_queries and user_prompt_lower in EMOTION_TAXONOMY:
+        derived_mood, playlist_query = EMOTION_TAXONOMY[user_prompt_lower]
+        track_search_queries = [playlist_query]
 
     sp_search = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
         client_id=SPOTIFY_CLIENT_ID,
@@ -120,9 +134,9 @@ async def process_mood(payload: dict):
     recommended_tracks = []
     seen_track_ids = set()
 
+    # 2. Search Organic Public Playlists
     try:
-        # 1. Search Organic Public Playlists
-        playlist_results = sp_search.search(q=playlist_query, type='playlist', limit=6)
+        playlist_results = sp_search.search(q=str(playlist_query), type='playlist', limit=6)
         playlists_obj = playlist_results.get('playlists') if isinstance(playlist_results, dict) else None
         playlists = playlists_obj.get('items', []) if isinstance(playlists_obj, dict) and playlists_obj.get('items') else []
 
@@ -150,10 +164,15 @@ async def process_mood(payload: dict):
                 "spotify_uri": playlist.get('uri', ''),
                 "cover_image": cover_url
             })
+    except Exception as pl_err:
+        print(f"[WARNING] Public playlist search error: {str(pl_err)}")
 
-        # 2. Direct Track Search: Gather at least 10 unique tracks
-        for term in track_search_queries:
-            track_results = sp_search.search(q=term, type='track', limit=15)
+    # 3. Direct Track Search (Using standard limit=10 to fix Spotify 400 error)
+    for term in track_search_queries:
+        if not term:
+            continue
+        try:
+            track_results = sp_search.search(q=str(term), type='track', limit=10)
             tracks_obj = track_results.get('tracks', {}) if isinstance(track_results, dict) else {}
             items = tracks_obj.get('items', []) if isinstance(tracks_obj, dict) else []
 
@@ -167,10 +186,13 @@ async def process_mood(payload: dict):
                     "spotify_uri": track.get('uri', ''),
                     "popularity": track.get('popularity', 0)
                 })
+        except Exception as t_err:
+            print(f"[WARNING] Track search failed for '{term}': {str(t_err)}")
 
-        # Fallback safeguard: if keyword searches yield < 10 songs, search raw prompt
-        if len(recommended_tracks) < 10:
-            fallback_results = sp_search.search(q=user_prompt, type='track', limit=20)
+    # 4. Fallback search using raw prompt if < 10 songs gathered
+    if len(recommended_tracks) < 10:
+        try:
+            fallback_results = sp_search.search(q=str(user_prompt), type='track', limit=20)
             tracks_obj = fallback_results.get('tracks', {}) if isinstance(fallback_results, dict) else {}
             items = tracks_obj.get('items', []) if isinstance(tracks_obj, dict) else []
 
@@ -184,12 +206,11 @@ async def process_mood(payload: dict):
                     "spotify_uri": track.get('uri', ''),
                     "popularity": track.get('popularity', 0)
                 })
+        except Exception as f_err:
+            print(f"[WARNING] Fallback search failed: {str(f_err)}")
 
-        recommended_tracks.sort(key=lambda x: x.get('popularity', 0), reverse=True)
-        recommended_tracks = recommended_tracks[:10]  # Guaranteed 10 songs
-
-    except Exception as e:
-        print(f"[ERROR] Spotify Search Error: {str(e)}")
+    recommended_tracks.sort(key=lambda x: x.get('popularity', 0), reverse=True)
+    recommended_tracks = recommended_tracks[:10]  # Guaranteed 10 songs
 
     return {
         "status": "success",
@@ -214,7 +235,6 @@ async def create_playlist(payload: dict, authorization: str = Header(None)):
 
     try:
         sp_user = spotipy.Spotify(auth=token)
-        # Uses /v1/me/playlists endpoint (Fixes 403 Forbidden Error)
         new_playlist = sp_user.current_user_playlist_create(
             name=playlist_title,
             public=True,
