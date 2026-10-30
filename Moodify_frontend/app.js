@@ -4,7 +4,6 @@ let currentTrackUris = [];
 let currentDerivedMood = "";
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Extract token from URL redirect callback if present
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
@@ -105,7 +104,7 @@ async function generatePlaylist() {
         const data = await response.json();
         
         currentDerivedMood = data.derived_mood;
-        moodOutput.innerText = currentDerivedMood;
+        if (moodOutput) moodOutput.innerText = currentDerivedMood;
         
         // Render Existing Playlists
         existingPlaylistsList.innerHTML = '';
@@ -139,8 +138,8 @@ async function generatePlaylist() {
             existingPlaylistsList.innerHTML = `<p class="text-xs text-slate-500">No existing playlists found for this mood.</p>`;
         }
 
-        // Render Custom Track Mix
-        trackList.innerHTML = '';
+        // Section 2: Store 10 track URIs silently without rendering song cards
+        if (trackList) trackList.innerHTML = ''; // Keep track list empty
         currentTrackUris = [];
 
         if (data.recommended_tracks && data.recommended_tracks.length > 0) {
@@ -148,19 +147,6 @@ async function generatePlaylist() {
                 if (track.spotify_uri) {
                     currentTrackUris.push(track.spotify_uri);
                 }
-                
-                const trackCard = `
-                    <div class="flex items-center justify-between bg-slate-950 p-3 rounded-lg border border-slate-800">
-                        <div class="truncate mr-2">
-                            <p class="font-semibold text-white text-sm truncate">${track.title}</p>
-                            <p class="text-xs text-slate-400 truncate">${track.artist}</p>
-                        </div>
-                        <a href="${track.spotify_uri}" target="_blank" class="px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-semibold rounded border border-green-500/30 transition whitespace-nowrap">
-                            Open Song
-                        </a>
-                    </div>
-                `;
-                trackList.innerHTML += trackCard;
             });
         }
 
@@ -176,7 +162,7 @@ async function generatePlaylist() {
 
 async function saveToSpotify() {
     const saveBtn = document.getElementById('saveBtn');
-    if (currentTrackUris.length === 0) return alert('No tracks to save!');
+    if (currentTrackUris.length === 0) return alert('No tracks found for this mood!');
 
     const token = sessionStorage.getItem('spotify_token');
     if (!token) return alert('Please link your Spotify account first!');
@@ -200,16 +186,16 @@ async function saveToSpotify() {
         const data = await response.json();
 
         if (response.ok) {
-            alert(`Success! Created "${data.playlist_name}" in your Spotify library.`);
+            alert(`Success! Created "${data.playlist_name}" in your Spotify library with 10 songs.`);
             window.open(data.playlist_url, '_blank');
         } else {
-            alert(data.detail || 'Failed to create playlist. Click "Link Spotify" first.');
+            alert(data.detail || 'Failed to create playlist.');
         }
     } catch (err) {
         alert('Error creating playlist. Make sure you are logged in.');
         console.error(err);
     } finally {
-        saveBtn.innerText = 'Save to Spotify';
+        saveBtn.innerText = 'Save to My Spotify';
         saveBtn.disabled = false;
     }
 }

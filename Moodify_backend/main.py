@@ -20,12 +20,12 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://moodify-pearl-sigma.vercel.app
 
 genai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-# Set cache_handler=None to prevent multi-user token bleeding on hosted server
+# Added explicit scopes for creating public and private playlists
 sp_oauth = SpotifyOAuth(
     client_id=SPOTIFY_CLIENT_ID,
     client_secret=SPOTIFY_CLIENT_SECRET,
     redirect_uri=SPOTIFY_REDIRECT_URI,
-    scope="playlist-modify-public user-read-private",
+    scope="playlist-modify-public playlist-modify-private user-read-private",
     cache_handler=None
 )
 
@@ -68,26 +68,11 @@ def callback(code: str):
         return RedirectResponse(url=f"{FRONTEND_URL}?auth=error")
 
 EMOTION_TAXONOMY = {
-    "energetic": ("High Energy Hype", "Energy Mix"),
-    "energy": ("High Energy Hype", "Energy Mix"),
-    "hyped": ("Workout Hype", "Workout Energy"),
-    "workout": ("Gym Motivation", "Workout"),
-    "angry": ("Aggressive Catharsis", "Rage"),
-    "confident": ("Triumphant Confidence", "Confidence Boost"),
-    "happy": ("Sunlit Euphoria", "Happy Hits"),
-    "joyful": ("Pure Joy", "Feel Good Pop"),
-    "excited": ("Euphoric Rush", "Party Hits"),
-    "motivated": ("Unstoppable Drive", "Motivation"),
-    "chill": ("Relaxed Lo-Fi", "Chill Vibes"),
-    "relaxed": ("Peaceful Serenity", "Peaceful Piano"),
-    "sleepy": ("Deep Sleep Ambient", "Sleep Lofi"),
-    "study": ("Focus & Concentration", "Deep Focus"),
-    "peaceful": ("Tranquil Meditation", "Ambient Chill"),
-    "sad": ("Melancholic Reflection", "Sad Acoustic"),
-    "lonely": ("Late Night Solitude", "Night Rain"),
-    "heartbroken": ("Heartbreak & Catharsis", "Broken Heart"),
-    "nostalgic": ("Nostalgic Memories", "Nostalgia Hits"),
-    "anxious": ("Calming Grounding", "Stress Relief")
+    "energetic": ("Energetic Hype", "Energy Mix"),
+    "chill": ("Chill Vibes", "Chill Lofi"),
+    "happy": ("Happy Beats", "Happy Hits"),
+    "sad": ("Sad Songs", "Sad Acoustic"),
+    "workout": ("Workout Energy", "Gym Motivation")
 }
 
 @app.post("/api/mood")
@@ -95,32 +80,29 @@ async def process_mood(payload: dict):
     user_prompt = payload.get("prompt", "Chill vibes").strip()
     user_prompt_lower = user_prompt.lower()
     
-    derived_mood = "Custom Vibe Mix"
+    # Default title to the user's input prompt emotion
+    derived_mood = user_prompt.title()
     playlist_query = user_prompt
     track_search_queries = [user_prompt]
 
-    # 1. AI Emotional Deciphering via Gemini (using active model gemini-1.5-flash)
     if genai_client:
         try:
             response = genai_client.models.generate_content(
                 model='gemini-1.5-flash',
                 contents=f"""
-                You are an emotional intelligence & musicology expert.
-                Deconstruct this user prompt: "{user_prompt}"
-
-                Understand the underlying human emotion (e.g., Nostalgia, Heartbreak, Catharsis, High Energy, Euphoria, Serenity).
+                Deconstruct this user mood prompt: "{user_prompt}"
 
                 Return a JSON object with strictly three keys:
-                1. "derived_mood": A poetic title for this mood (3-4 words max).
-                2. "playlist_query": A 1-2 word query that matches real Spotify public playlists.
-                3. "search_keywords": An array of 3 song/vibe keywords to search individual tracks directly.
+                1. "derived_mood": Clean title matching the exact user emotion/mood (1-3 words, e.g. "{user_prompt.title()}").
+                2. "playlist_query": 1-2 word query matching real Spotify public playlists.
+                3. "search_keywords": Array of 3-4 keywords to search individual songs directly.
 
                 Return ONLY valid JSON without markdown formatting.
                 """
             )
             raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
             ai_data = json.loads(raw_text)
-            derived_mood = ai_data.get("derived_mood", "Dynamic Vibe Mix")
+            derived_mood = ai_data.get("derived_mood", user_prompt.title())
             playlist_query = ai_data.get("playlist_query", user_prompt)
             track_search_queries = ai_data.get("search_keywords", [playlist_query])
         except Exception as e:
@@ -139,7 +121,7 @@ async def process_mood(payload: dict):
     seen_track_ids = set()
 
     try:
-        # 2. Search Spotify Public Playlists (Returns only organic matches, e.g. 2 if only 2 exist)
+        # 1. Search Organic Public Playlists (Returns only existing playlists matching the mood)
         playlist_results = sp_search.search(q=playlist_query, type='playlist', limit=6)
         playlists_obj = playlist_results.get('playlists') if isinstance(playlist_results, dict) else None
         playlists = playlists_obj.get('items', []) if isinstance(playlists_obj, dict) and playlists_obj.get('items') else []
@@ -169,9 +151,9 @@ async def process_mood(payload: dict):
                 "cover_image": cover_url
             })
 
-        # 3. Direct Track Search (Fixes 403 Forbidden errors)
-        for term in track_search_queries[:3]:
-            track_results = sp_search.search(q=term, type='track', limit=4)
+        # 2. Direct Track Search: Gather exactly 10 songs for behind-the-scenes playlist creation
+        for term in track_search_queries:
+            track_results = sp_search.search(q=term, type='track', limit=6)
             tracks_obj = track_results.get('tracks', {}) if isinstance(track_results, dict) else {}
             items = tracks_obj.get('items', []) if isinstance(tracks_obj, dict) else []
 
@@ -179,19 +161,17 @@ async def process_mood(payload: dict):
                 if not track or not isinstance(track, dict) or not track.get('id') or track['id'] in seen_track_ids:
                     continue
                 seen_track_ids.add(track['id'])
-                artists = track.get('artists', [])
-                artist_name = artists[0].get('name', 'Unknown Artist') if (artists and isinstance(artists[0], dict)) else "Unknown Artist"
 
                 recommended_tracks.append({
                     "title": track.get('name', 'Untitled Track'),
-                    "artist": artist_name,
-                    "external_url": track.get('external_urls', {}).get('spotify', '#'),
                     "spotify_uri": track.get('uri', ''),
                     "popularity": track.get('popularity', 0)
                 })
+                if len(recommended_tracks) >= 15:
+                    break
 
         recommended_tracks.sort(key=lambda x: x.get('popularity', 0), reverse=True)
-        recommended_tracks = recommended_tracks[:8]
+        recommended_tracks = recommended_tracks[:10]  # Exactly 10 songs
 
     except Exception as e:
         print(f"[ERROR] Spotify Search Error: {str(e)}")
@@ -206,11 +186,11 @@ async def process_mood(payload: dict):
 
 @app.post("/api/create-playlist")
 async def create_playlist(payload: dict, authorization: str = Header(None)):
-    playlist_title = payload.get("title", "Moodify Custom Playlist")
+    playlist_title = payload.get("title", "Moodify Mix")
     track_uris = payload.get("track_uris", [])
 
     if not track_uris:
-        raise HTTPException(status_code=400, detail="No track URIs provided.")
+        raise HTTPException(status_code=400, detail="No tracks available to create playlist.")
 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization token.")
@@ -219,14 +199,11 @@ async def create_playlist(payload: dict, authorization: str = Header(None)):
 
     try:
         sp_user = spotipy.Spotify(auth=token)
-        user_profile = sp_user.current_user()
-        user_id = user_profile['id']
-
-        new_playlist = sp_user.user_playlist_create(
-            user=user_id,
-            name=f"Moodify: {playlist_title}",
+        # Uses /v1/me/playlists endpoint (Fixes 403 Forbidden Error)
+        new_playlist = sp_user.current_user_playlist_create(
+            name=playlist_title,
             public=True,
-            description="Generated by Moodify AI Music Curation."
+            description="Curated by Moodify AI based on your emotion."
         )
 
         sp_user.playlist_add_items(playlist_id=new_playlist['id'], items=track_uris)
