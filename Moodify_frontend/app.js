@@ -1,21 +1,25 @@
 const API_BASE_URL = "https://moodify-a605.onrender.com";
-const token = sessionStorage.getItem('spotify_token');
 
-const response = await fetch(`${API_BASE_URL}/api/me`, {
-    headers: {
-        'Authorization': `Bearer ${token}`
-    }
-});
 let currentTrackUris = [];
 let currentDerivedMood = "";
 
-window.addEventListener('DOMContentLoaded', checkUserAuth);
+window.addEventListener('DOMContentLoaded', () => {
+    // Extract token from URL redirect callback if present
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    if (token) {
+        sessionStorage.setItem('spotify_token', token);
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    checkUserAuth();
+});
 
 function linkSpotify() {
     window.location.href = `${API_BASE_URL}/login`;
 }
 
-// 1. Helper function to reset UI back to logged-out state
 function showLoginButton() {
     const authContainer = document.getElementById('authContainer');
     if (!authContainer) return;
@@ -29,15 +33,17 @@ function showLoginButton() {
     `;
 }
 
-// 2. Updated checkUserAuth with 401 handling
 async function checkUserAuth() {
     const authContainer = document.getElementById('authContainer');
     if (!authContainer) return;
 
+    const token = sessionStorage.getItem('spotify_token');
+
     try {
-        const response = await fetch(`${API_BASE_URL}/api/me`);
+        const response = await fetch(`${API_BASE_URL}/api/me`, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
         
-        // If unauthenticated or token expired, force UI reset
         if (!response.ok || response.status === 401) {
             showLoginButton();
             return;
@@ -65,10 +71,11 @@ async function checkUserAuth() {
         showLoginButton();
     }
 }
+
 async function logout() {
     try {
+        sessionStorage.removeItem('spotify_token');
         await fetch(`${API_BASE_URL}/api/logout`);
-        // Refresh page back to clean view
         window.location.href = window.location.pathname;
     } catch (err) {
         console.error("Logout failed", err);
@@ -100,7 +107,7 @@ async function generatePlaylist() {
         currentDerivedMood = data.derived_mood;
         moodOutput.innerText = currentDerivedMood;
         
-        // 1. Render Existing Playlists (Section 1)
+        // Render Existing Playlists
         existingPlaylistsList.innerHTML = '';
         if (data.existing_playlists && data.existing_playlists.length > 0) {
             data.existing_playlists.forEach(pl => {
@@ -132,7 +139,7 @@ async function generatePlaylist() {
             existingPlaylistsList.innerHTML = `<p class="text-xs text-slate-500">No existing playlists found for this mood.</p>`;
         }
 
-        // 2. Render Custom Track Mix (Section 2)
+        // Render Custom Track Mix
         trackList.innerHTML = '';
         currentTrackUris = [];
 
@@ -159,7 +166,7 @@ async function generatePlaylist() {
 
         resultsDiv.classList.remove('hidden');
     } catch (err) {
-        alert('Failed to connect to backend server. Make sure FastAPI is running on port 8000.');
+        alert('Failed to connect to backend server. Please try again.');
         console.error(err);
     } finally {
         btn.innerText = 'Generate Playlist';
@@ -167,22 +174,12 @@ async function generatePlaylist() {
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-
-    if (token) {
-        sessionStorage.setItem('spotify_token', token);
-        // Clean URL parameter
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    checkUserAuth();
-});
-
 async function saveToSpotify() {
     const saveBtn = document.getElementById('saveBtn');
     if (currentTrackUris.length === 0) return alert('No tracks to save!');
+
+    const token = sessionStorage.getItem('spotify_token');
+    if (!token) return alert('Please link your Spotify account first!');
 
     saveBtn.innerText = 'Saving...';
     saveBtn.disabled = true;
@@ -190,7 +187,10 @@ async function saveToSpotify() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/create-playlist`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({
                 title: currentDerivedMood,
                 track_uris: currentTrackUris
