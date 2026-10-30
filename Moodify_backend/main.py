@@ -20,6 +20,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://moodify-pearl-sigma.vercel.app
 
 genai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
+# Statess/cache-free handler prevents token bleed across multi-user server requests
 sp_oauth = SpotifyOAuth(
     client_id=SPOTIFY_CLIENT_ID,
     client_secret=SPOTIFY_CLIENT_SECRET,
@@ -79,51 +80,58 @@ async def process_mood(payload: dict):
     user_prompt = payload.get("prompt", "Chill vibes").strip()
     user_prompt_lower = user_prompt.lower()
     
-    derived_mood = user_prompt.title()
-    playlist_query = user_prompt
-    track_search_queries = [user_prompt]
+    # Pre-truncate prompt fallback for safe fallback title rendering
+    prompt_words = user_prompt.split()
+    safe_title = " ".join(prompt_words[:3]).title() if len(prompt_words) > 3 else user_prompt.title()
 
-    # 1. AI Emotional Deciphering via Gemini (using active models)
+    derived_mood = safe_title
+    playlist_query = safe_title
+    track_search_queries = [safe_title]
+
+    # 1. AI Emotional Deciphering via Gemini 2.0 Flash
     if genai_client:
-        ai_response_text = None
-        for model_name in ['gemini-2.5-flash', 'gemini-2.0-flash']:
-            try:
-                response = genai_client.models.generate_content(
-                    model=model_name,
-                    contents=f"""
-                    Deconstruct this user mood prompt: "{user_prompt}"
+        try:
+            response = genai_client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=f"""
+                You are an expert musicologist and emotion analyst.
+                Deconstruct this user mood prompt: "{user_prompt}"
 
-                    Return a JSON object with strictly three keys:
-                    1. "derived_mood": Clean title matching the exact user emotion/mood (1-3 words, e.g. "{user_prompt.title()}").
-                    2. "playlist_query": 1-2 word query matching real Spotify public playlists.
-                    3. "search_keywords": Array of 3-4 keywords to search individual songs directly.
+                Task:
+                1. "derived_mood": Create a short, poetic playlist title (STRICTLY 2 TO 4 WORDS MAX).
+                2. "playlist_query": 1 to 2 concise words to search real public Spotify playlists.
+                3. "search_keywords": Array of 3 short search terms (1-2 words each) to query tracks on Spotify directly.
 
-                    Return ONLY valid JSON without markdown formatting.
-                    """
-                )
-                ai_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-                if ai_response_text:
-                    break
-            except Exception as e:
-                print(f"[WARNING] Gemini model '{model_name}' failed: {str(e)}")
-
-        if ai_response_text:
-            try:
-                ai_data = json.loads(ai_response_text)
-                derived_mood = ai_data.get("derived_mood", user_prompt.title())
-                playlist_query = ai_data.get("playlist_query", user_prompt)
+                Return ONLY raw valid JSON matching this schema without markdown code block formatting:
+                {{
+                  "derived_mood": "...",
+                  "playlist_query": "...",
+                  "search_keywords": ["...", "...", "..."]
+                }}
+                """
+            )
+            if response and response.text:
+                clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+                ai_data = json.loads(clean_text)
                 
-                raw_keywords = ai_data.get("search_keywords", [playlist_query])
-                if isinstance(raw_keywords, list):
-                    track_search_queries = [str(k).strip() for k in raw_keywords if k]
-                else:
-                    track_search_queries = [str(playlist_query)]
-            except Exception as parse_err:
-                print(f"[WARNING] Gemini JSON parsing failed: {str(parse_err)}")
+                # Enforce strict 4-word max cap on derived_mood title
+                raw_mood = ai_data.get("derived_mood", safe_title)
+                mood_words = str(raw_mood).strip().split()
+                derived_mood = " ".join(mood_words[:4]).title()
 
-    if not track_search_queries and user_prompt_lower in EMOTION_TAXONOMY:
-        derived_mood, playlist_query = EMOTION_TAXONOMY[user_prompt_lower]
-        track_search_queries = [playlist_query]
+                # Enforce strict 2-word max cap on playlist search query
+                raw_pl_query = ai_data.get("playlist_query", safe_title)
+                pl_words = str(raw_pl_query).strip().split()
+                playlist_query = " ".join(pl_words[:2])
+
+                raw_keywords = ai_data.get("search_keywords", [playlist_query])
+                if isinstance(raw_keywords, list) and len(raw_keywords) > 0:
+                    track_search_queries = [str(k).strip() for k in raw_keywords if k]
+        except Exception as e:
+            print(f"[WARNING] Gemini 2.0 Flash call failed: {str(e)}")
+            if user_prompt_lower in EMOTION_TAXONOMY:
+                derived_mood, playlist_query = EMOTION_TAXONOMY[user_prompt_lower]
+                track_search_queries = [playlist_query]
 
     sp_search = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
         client_id=SPOTIFY_CLIENT_ID,
@@ -167,7 +175,7 @@ async def process_mood(payload: dict):
     except Exception as pl_err:
         print(f"[WARNING] Public playlist search error: {str(pl_err)}")
 
-    # 3. Direct Track Search (Using standard limit=10 to fix Spotify 400 error)
+    # 3. Direct Track Gathering (limit=10 to avoid Spotify 400 error)
     for term in track_search_queries:
         if not term:
             continue
@@ -189,10 +197,10 @@ async def process_mood(payload: dict):
         except Exception as t_err:
             print(f"[WARNING] Track search failed for '{term}': {str(t_err)}")
 
-    # 4. Fallback search using raw prompt if < 10 songs gathered
+    # 4. Safety Fallback: Guarantee exactly 10 songs gathered behind the scenes
     if len(recommended_tracks) < 10:
         try:
-            fallback_results = sp_search.search(q=str(user_prompt), type='track', limit=20)
+            fallback_results = sp_search.search(q=str(playlist_query), type='track', limit=20)
             tracks_obj = fallback_results.get('tracks', {}) if isinstance(fallback_results, dict) else {}
             items = tracks_obj.get('items', []) if isinstance(tracks_obj, dict) else []
 
@@ -210,7 +218,7 @@ async def process_mood(payload: dict):
             print(f"[WARNING] Fallback search failed: {str(f_err)}")
 
     recommended_tracks.sort(key=lambda x: x.get('popularity', 0), reverse=True)
-    recommended_tracks = recommended_tracks[:10]  # Guaranteed 10 songs
+    recommended_tracks = recommended_tracks[:10]  # Exactly 10 tracks
 
     return {
         "status": "success",
