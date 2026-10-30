@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://moodify-a605.onrender.com";
 const token = sessionStorage.getItem('spotify_token');
 
 const response = await fetch(`${API_BASE_URL}/api/me`, {
