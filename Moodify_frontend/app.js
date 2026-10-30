@@ -165,7 +165,7 @@ async function saveToSpotify() {
     if (currentTrackUris.length === 0) return alert('No tracks found for this mood!');
 
     const token = sessionStorage.getItem('spotify_token');
-    if (!token) return alert('Please link your Spotify account first!');
+    if (!token) return alert('Please click "Link Spotify" to log in first!');
 
     saveBtn.innerText = 'Saving...';
     saveBtn.disabled = true;
@@ -188,14 +188,20 @@ async function saveToSpotify() {
         if (response.ok) {
             alert(`Success! Created "${data.playlist_name}" in your Spotify library with 10 songs.`);
             window.open(data.playlist_url, '_blank');
+        } else if (response.status === 401 || (data.detail && data.detail.includes("401"))) {
+            // Handle expired token cleanly
+            sessionStorage.removeItem('spotify_token');
+            showLoginButton();
+            alert('Your Spotify login session expired. Please click "Link Spotify" at the top right to log back in!');
         } else {
             alert(data.detail || 'Failed to create playlist.');
         }
     } catch (err) {
-        alert('Error creating playlist. Make sure you are logged in.');
+        alert('Error connecting to backend. Please re-link Spotify and try again.');
         console.error(err);
     } finally {
         saveBtn.innerText = 'Save to My Spotify';
         saveBtn.disabled = false;
     }
+
 }
