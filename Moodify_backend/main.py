@@ -2,6 +2,7 @@ import os
 import time
 import json
 import secrets
+import asyncio
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -71,8 +72,32 @@ EMOTION_TAXONOMY = {
     "chill": ("Chill Vibes", "Chill Lofi"),
     "happy": ("Happy Beats", "Happy Hits"),
     "sad": ("Sad Songs", "Sad Acoustic"),
-    "workout": ("Workout Energy", "Gym Motivation")
+    "workout": ("Workout Energy", "Gym Motivation"),
+    "study": ("Deep Study", "Study Lofi"),
+    "studying": ("Study Focus", "Study Beats")
 }
+
+def get_gemini_analysis(user_prompt: str):
+    """Synchronous Gemini generation call."""
+    return genai_client.models.generate_content(
+        model='gemini-3.8-flash',
+        contents=f"""
+        You are an expert musicologist and emotion analyst.
+        Deconstruct this user mood prompt: "{user_prompt}"
+
+        Task:
+        1. "derived_mood": Create a short, poetic playlist title (STRICTLY 2 TO 4 WORDS MAX).
+        2. "playlist_query": 1 to 2 concise words to search real public Spotify playlists.
+        3. "search_keywords": Array of 3 short search terms (1-2 words each) to query tracks on Spotify directly.
+
+        Return ONLY raw valid JSON matching this schema without markdown code block formatting:
+        {{
+          "derived_mood": "...",
+          "playlist_query": "...",
+          "search_keywords": ["...", "...", "..."]
+        }}
+        """
+    )
 
 @app.post("/api/mood")
 async def process_mood(payload: dict):
@@ -86,42 +111,17 @@ async def process_mood(payload: dict):
     playlist_query = safe_title
     track_search_queries = [safe_title]
 
-    # 1. AI Emotional Deciphering via Active Gemini Models
+    # 1. AI Deciphering via Gemini 3.8 Flash with strict 3.5s timeout
     if genai_client:
-        ai_response_text = None
-        candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
-
-        for model_name in candidate_models:
-            try:
-                response = genai_client.models.generate_content(
-                    model=model_name,
-                    contents=f"""
-                    You are an expert musicologist and emotion analyst.
-                    Deconstruct this user mood prompt: "{user_prompt}"
-
-                    Task:
-                    1. "derived_mood": Create a short, poetic playlist title (STRICTLY 2 TO 4 WORDS MAX).
-                    2. "playlist_query": 1 to 2 concise words to search real public Spotify playlists.
-                    3. "search_keywords": Array of 3 short search terms (1-2 words each) to query tracks on Spotify directly.
-
-                    Return ONLY raw valid JSON matching this schema without markdown code block formatting:
-                    {{
-                      "derived_mood": "...",
-                      "playlist_query": "...",
-                      "search_keywords": ["...", "...", "..."]
-                    }}
-                    """
-                )
-                if response and response.text:
-                    ai_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-                    if ai_response_text:
-                        break  # Stop loop as soon as an active model succeeds
-            except Exception as e:
-                print(f"[WARNING] Gemini model '{model_name}' failed/unavailable ({str(e)}). Trying next candidate...")
-
-        if ai_response_text:
-            try:
-                ai_data = json.loads(ai_response_text)
+        try:
+            # Runs Gemini in a background thread and aborts if it takes longer than 3.5 seconds
+            response = await asyncio.wait_for(
+                asyncio.to_thread(get_gemini_analysis, user_prompt),
+                timeout=3.5
+            )
+            if response and response.text:
+                clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+                ai_data = json.loads(clean_text)
                 
                 raw_mood = ai_data.get("derived_mood", safe_title)
                 mood_words = str(raw_mood).strip().split()
@@ -134,10 +134,12 @@ async def process_mood(payload: dict):
                 raw_keywords = ai_data.get("search_keywords", [playlist_query])
                 if isinstance(raw_keywords, list) and len(raw_keywords) > 0:
                     track_search_queries = [str(k).strip() for k in raw_keywords if k]
-            except Exception as parse_err:
-                print(f"[WARNING] Gemini JSON parsing failed: {str(parse_err)}")
+        except asyncio.TimeoutError:
+            print("[WARNING] Gemini request timed out (>3.5s). Using fast keyword fallback.")
+        except Exception as e:
+            print(f"[WARNING] Gemini call failed ({str(e)}). Using fast keyword fallback.")
 
-    if not track_search_queries and user_prompt_lower in EMOTION_TAXONOMY:
+    if user_prompt_lower in EMOTION_TAXONOMY:
         derived_mood, playlist_query = EMOTION_TAXONOMY[user_prompt_lower]
         track_search_queries = [playlist_query]
 
@@ -183,7 +185,7 @@ async def process_mood(payload: dict):
     except Exception as pl_err:
         print(f"[WARNING] Public playlist search error: {str(pl_err)}")
 
-    # 3. Direct Track Gathering (Early Exit Optimization)
+    # 3. Direct Track Gathering (Optimized with Early Exit)
     for term in track_search_queries:
         if len(recommended_tracks) >= 10:
             break
@@ -209,7 +211,7 @@ async def process_mood(payload: dict):
         except Exception as t_err:
             print(f"[WARNING] Track search failed for '{term}': {str(t_err)}")
 
-    # 4. Fallback: Guarantee 10 tracks
+    # 4. Fallback search if < 10 tracks
     if len(recommended_tracks) < 10:
         try:
             fallback_results = sp_search.search(q=str(playlist_query), type='track', limit=20)
