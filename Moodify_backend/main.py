@@ -171,8 +171,10 @@ async def process_mood(payload: dict):
     except Exception as pl_err:
         print(f"[WARNING] Public playlist search error: {str(pl_err)}")
 
-    # 3. Direct Track Gathering (limit=10)
+    # 3. Direct Track Gathering (Optimized with early exit once 10 tracks are gathered)
     for term in track_search_queries:
+        if len(recommended_tracks) >= 10:
+            break
         if not term:
             continue
         try:
@@ -190,6 +192,8 @@ async def process_mood(payload: dict):
                     "spotify_uri": track.get('uri', ''),
                     "popularity": track.get('popularity', 0)
                 })
+                if len(recommended_tracks) >= 10:
+                    break
         except Exception as t_err:
             print(f"[WARNING] Track search failed for '{term}': {str(t_err)}")
 
@@ -210,6 +214,8 @@ async def process_mood(payload: dict):
                     "spotify_uri": track.get('uri', ''),
                     "popularity": track.get('popularity', 0)
                 })
+                if len(recommended_tracks) >= 10:
+                    break
         except Exception as f_err:
             print(f"[WARNING] Fallback search failed: {str(f_err)}")
 
