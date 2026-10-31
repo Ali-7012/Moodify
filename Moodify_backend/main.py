@@ -86,31 +86,42 @@ async def process_mood(payload: dict):
     playlist_query = safe_title
     track_search_queries = [safe_title]
 
-    # 1. AI Emotional Deciphering via Gemini 3.8 Flash
+    # 1. AI Emotional Deciphering via Active Gemini Models
     if genai_client:
-        try:
-            response = genai_client.models.generate_content(
-                model='gemini-3.8-flash',
-                contents=f"""
-                You are an expert musicologist and emotion analyst.
-                Deconstruct this user mood prompt: "{user_prompt}"
+        ai_response_text = None
+        candidate_models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
 
-                Task:
-                1. "derived_mood": Create a short, poetic playlist title (STRICTLY 2 TO 4 WORDS MAX).
-                2. "playlist_query": 1 to 2 concise words to search real public Spotify playlists.
-                3. "search_keywords": Array of 3 short search terms (1-2 words each) to query tracks on Spotify directly.
+        for model_name in candidate_models:
+            try:
+                response = genai_client.models.generate_content(
+                    model=model_name,
+                    contents=f"""
+                    You are an expert musicologist and emotion analyst.
+                    Deconstruct this user mood prompt: "{user_prompt}"
 
-                Return ONLY raw valid JSON matching this schema without markdown code block formatting:
-                {{
-                  "derived_mood": "...",
-                  "playlist_query": "...",
-                  "search_keywords": ["...", "...", "..."]
-                }}
-                """
-            )
-            if response and response.text:
-                clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-                ai_data = json.loads(clean_text)
+                    Task:
+                    1. "derived_mood": Create a short, poetic playlist title (STRICTLY 2 TO 4 WORDS MAX).
+                    2. "playlist_query": 1 to 2 concise words to search real public Spotify playlists.
+                    3. "search_keywords": Array of 3 short search terms (1-2 words each) to query tracks on Spotify directly.
+
+                    Return ONLY raw valid JSON matching this schema without markdown code block formatting:
+                    {{
+                      "derived_mood": "...",
+                      "playlist_query": "...",
+                      "search_keywords": ["...", "...", "..."]
+                    }}
+                    """
+                )
+                if response and response.text:
+                    ai_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+                    if ai_response_text:
+                        break  # Stop loop as soon as an active model succeeds
+            except Exception as e:
+                print(f"[WARNING] Gemini model '{model_name}' failed/unavailable ({str(e)}). Trying next candidate...")
+
+        if ai_response_text:
+            try:
+                ai_data = json.loads(ai_response_text)
                 
                 raw_mood = ai_data.get("derived_mood", safe_title)
                 mood_words = str(raw_mood).strip().split()
@@ -123,11 +134,12 @@ async def process_mood(payload: dict):
                 raw_keywords = ai_data.get("search_keywords", [playlist_query])
                 if isinstance(raw_keywords, list) and len(raw_keywords) > 0:
                     track_search_queries = [str(k).strip() for k in raw_keywords if k]
-        except Exception as e:
-            print(f"[WARNING] Gemini 3.8 Flash call failed: {str(e)}")
-            if user_prompt_lower in EMOTION_TAXONOMY:
-                derived_mood, playlist_query = EMOTION_TAXONOMY[user_prompt_lower]
-                track_search_queries = [playlist_query]
+            except Exception as parse_err:
+                print(f"[WARNING] Gemini JSON parsing failed: {str(parse_err)}")
+
+    if not track_search_queries and user_prompt_lower in EMOTION_TAXONOMY:
+        derived_mood, playlist_query = EMOTION_TAXONOMY[user_prompt_lower]
+        track_search_queries = [playlist_query]
 
     sp_search = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
         client_id=SPOTIFY_CLIENT_ID,
@@ -171,7 +183,7 @@ async def process_mood(payload: dict):
     except Exception as pl_err:
         print(f"[WARNING] Public playlist search error: {str(pl_err)}")
 
-    # 3. Direct Track Gathering (Optimized with early exit once 10 tracks are gathered)
+    # 3. Direct Track Gathering (Early Exit Optimization)
     for term in track_search_queries:
         if len(recommended_tracks) >= 10:
             break
