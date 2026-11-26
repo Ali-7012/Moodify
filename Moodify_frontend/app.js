@@ -307,6 +307,7 @@ async function saveToSpotify() {
         saveButton.textContent = "Saved";
 
         const added = Number.isFinite(data.tracks_added) ? data.tracks_added : state.trackUris.length;
+        $("mixMeta").textContent = `${added} ${added === 1 ? "track" : "tracks"}, saved to your library.`;
         const name = typeof data.playlist_name === "string" ? data.playlist_name : state.mixTitle;
         const link = safeHttpsUrl(data.playlist_url);
 
