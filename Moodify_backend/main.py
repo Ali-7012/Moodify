@@ -107,13 +107,18 @@ def bearer_token(authorization: Optional[str]) -> str:
 def spotify_http_error(err: SpotifyException, action: str) -> HTTPException:
     """Turn a Spotify error into a short message that is safe to show users."""
     status = getattr(err, "http_status", None)
+    reason = str(getattr(err, "msg", "") or err)
     if status == 401:
         return HTTPException(status_code=401, detail="Your Spotify session expired. Link Spotify again.")
     if status == 403:
-        return HTTPException(
-            status_code=403,
-            detail="Spotify refused this. If the app is in development mode, your account must be on its user list.",
-        )
+        log.warning("Spotify 403 while %s: %s", action, reason)
+        if "not be registered" in reason.lower() or "developer.spotify.com" in reason.lower():
+            return HTTPException(
+                status_code=403,
+                detail="Saving is limited to Moodify's test accounts by Spotify's rules, and this account "
+                       "isn't one of them yet. You can still preview the tracks or copy their links below.",
+            )
+        return HTTPException(status_code=403, detail=f"Spotify couldn't {action} for this account. Try linking Spotify again.")
     if status == 429:
         return HTTPException(status_code=503, detail="Spotify is busy right now. Try again in a minute.")
     log.warning("Spotify error while %s: %s", action, err)
@@ -491,10 +496,18 @@ def shape_track(track) -> Optional[dict]:
     if not isinstance(track, dict) or not track.get("id") or not track.get("uri"):
         return None
     artists = track.get("artists") if isinstance(track.get("artists"), list) else []
+    album = track.get("album") if isinstance(track.get("album"), dict) else {}
+    images = [i for i in (album.get("images") or []) if isinstance(i, dict) and i.get("url")]
+    # Smallest cover that is still at least 64px wide; Spotify lists images largest first.
+    small = [i for i in images if (i.get("width") or 0) >= 64]
+    cover = (small[-1] if small else images[-1])["url"] if images else ""
+    urls = track.get("external_urls") if isinstance(track.get("external_urls"), dict) else {}
     return {
         "id": track["id"],
         "title": track.get("name") or "Untitled Track",
         "artist": ", ".join(a.get("name", "") for a in artists if isinstance(a, dict) and a.get("name")),
+        "album_art": cover,
+        "external_url": urls.get("spotify") or f"https://open.spotify.com/track/{track['id']}",
         "spotify_uri": track["uri"],
         "popularity": track.get("popularity") or 0,
     }

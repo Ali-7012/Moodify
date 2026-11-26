@@ -215,19 +215,129 @@ function renderResults(data) {
 
     const count = state.trackUris.length;
     $("mixMeta").textContent = count
-        ? `${count} ${count === 1 ? "track" : "tracks"}, ready to save.`
+        ? `${count} ${count === 1 ? "track" : "tracks"}. Preview them below, or save the mix to Spotify.`
         : "No tracks matched this mood. Try describing it differently.";
 
+    $("copyBtn").disabled = count === 0;
     const saveButton = $("saveBtn");
     saveButton.disabled = count === 0;
     saveButton.textContent = "Save to my Spotify";
     setStatus("saveStatus", "info");
 
+    renderTracks(tracks);
     renderPlaylists(Array.isArray(data.existing_playlists) ? data.existing_playlists : []);
 
     const results = $("results");
     results.hidden = false;
     results.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+
+/* ---------- Mix preview ---------- */
+
+function trackIdFromUri(uri) {
+    const match = /^spotify:track:([A-Za-z0-9]+)$/.exec(uri || "");
+    return match ? match[1] : "";
+}
+
+function trackWebUrl(track) {
+    const id = trackIdFromUri(track.spotify_uri);
+    return safeHttpsUrl(track.external_url) || (id ? `https://open.spotify.com/track/${id}` : "");
+}
+
+function renderTracks(tracks) {
+    const list = $("trackList");
+    const player = $("player");
+    player.hidden = true;
+    player.replaceChildren();
+
+    const items = tracks
+        .filter((t) => t && trackIdFromUri(t.spotify_uri))
+        .map((t, index) => {
+            const title = typeof t.title === "string" && t.title ? t.title : "Untitled track";
+            const artist = typeof t.artist === "string" ? t.artist : "";
+            const art = safeHttpsUrl(t.album_art);
+            const link = trackWebUrl(t);
+
+            const cover = art
+                ? el("img", { src: art, alt: "", class: "track-art", width: 40, height: 40, loading: "lazy" })
+                : el("div", { class: "track-art", "aria-hidden": "true" });
+
+            const name = link
+                ? el("a", { class: "track-title", href: link, target: "_blank", rel: "noopener noreferrer", title }, title)
+                : el("span", { class: "track-title", title }, title);
+
+            const previewButton = el("button", {
+                type: "button",
+                class: "link-button track-preview",
+                "aria-label": `Preview ${title}`,
+            }, "Preview");
+            previewButton.addEventListener("click", () => showPreview(t.spotify_uri, title, previewButton));
+
+            return el("li", { class: "track" },
+                el("span", { class: "track-number", "aria-hidden": "true" }, String(index + 1)),
+                cover,
+                el("div", { class: "track-text" },
+                    name,
+                    artist ? el("span", { class: "track-artist" }, artist) : null,
+                ),
+                previewButton,
+            );
+        });
+
+    list.replaceChildren(...items);
+}
+
+// Spotify's official embed plays a preview for anyone, or the full song if the visitor is
+// logged into Spotify in this browser. It needs no API access, so it works for every visitor.
+function showPreview(uri, title, button) {
+    const id = trackIdFromUri(uri);
+    if (!id) return;
+    const player = $("player");
+    const frame = el("iframe", {
+        src: `https://open.spotify.com/embed/track/${id}?utm_source=moodify&theme=0`,
+        title: `Spotify player: ${title}`,
+        width: "100%",
+        height: "152",
+        loading: "lazy",
+        allow: "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture",
+    });
+    player.replaceChildren(frame);
+    player.hidden = false;
+
+    document.querySelectorAll(".track.is-playing").forEach((row) => row.classList.remove("is-playing"));
+    button.closest(".track")?.classList.add("is-playing");
+    player.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+}
+
+// Works for everyone, including accounts Spotify won't let us save for.
+async function copyTrackLinks() {
+    const links = state.trackUris.map((uri) => trackIdFromUri(uri)).filter(Boolean)
+        .map((id) => `https://open.spotify.com/track/${id}`);
+    if (links.length === 0) {
+        setStatus("saveStatus", "error", "There are no tracks to copy yet.");
+        return;
+    }
+    const text = links.join("\n");
+    let copied = false;
+    try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+    } catch {
+        // Older browsers: fall back to a hidden textarea.
+        const area = el("textarea", { value: text, readOnly: true });
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.append(area);
+        area.select();
+        try { copied = document.execCommand("copy"); } catch { copied = false; }
+        area.remove();
+    }
+    if (copied) {
+        setStatus("saveStatus", "info",
+            `Copied ${links.length} song links. In the Spotify desktop app, open or create a playlist and press Ctrl+V (Cmd+V on Mac) to add them all.`);
+    } else {
+        setStatus("saveStatus", "error", "Your browser blocked copying. Use Preview to listen, or tap a song title to open it in Spotify.");
+    }
 }
 
 function renderPlaylists(playlists) {
@@ -420,6 +530,7 @@ function init() {
 
     $("moodForm").addEventListener("submit", generatePlaylist);
     $("saveBtn").addEventListener("click", saveToSpotify);
+    $("copyBtn").addEventListener("click", copyTrackLinks);
     document.addEventListener("click", handleSpotifyLinkClick);
 
     document.querySelectorAll(".example").forEach((button) => {

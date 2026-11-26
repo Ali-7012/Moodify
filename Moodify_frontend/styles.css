@@ -306,6 +306,90 @@ h1 {
 
 .mix-text p { margin: var(--s2) 0 0; }
 
+.mix-actions {
+    display: flex;
+    gap: var(--s3);
+    flex-shrink: 0;
+}
+
+.player { margin-top: var(--s5); }
+
+.player iframe {
+    display: block;
+    border: 0;
+    border-radius: var(--radius);
+}
+
+.track-list {
+    list-style: none;
+    margin: var(--s5) 0 0;
+    padding: 0;
+}
+
+.track {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    padding: var(--s2) 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.track:last-child { border-bottom: 0; }
+
+.track-number {
+    width: 20px;
+    flex-shrink: 0;
+    text-align: right;
+    font-size: 14px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.track.is-playing .track-number { color: var(--primary); }
+
+.track-art {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    object-fit: cover;
+    background: var(--surface-2);
+}
+
+.track-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.track-title,
+.track-artist {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.track-title {
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+}
+
+a.track-title:hover { text-decoration: underline; }
+
+.track.is-playing .track-title { color: var(--primary); }
+
+.track-artist {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.track-preview {
+    flex-shrink: 0;
+    min-height: 44px;
+}
+
 .section-title {
     margin-top: var(--s7);
     font-size: 20px;
@@ -399,6 +483,7 @@ h1 {
     .page { padding: var(--s6) var(--s4) var(--s7); }
     .mood-form { flex-direction: column; }
     .mix { flex-direction: column; align-items: stretch; }
+    .mix-actions { flex-direction: column-reverse; }
     .mix h2 { font-size: 24px; }
     .user-name { max-width: 90px; }
 }

@@ -78,9 +78,15 @@
                     <h2 id="mixTitle">Your mix: <span id="moodOutput" class="mix-name"></span></h2>
                     <p id="mixMeta" class="muted"></p>
                 </div>
-                <button type="button" id="saveBtn" class="btn btn-primary">Save to my Spotify</button>
+                <div class="mix-actions">
+                    <button type="button" id="copyBtn" class="btn btn-ghost">Copy links</button>
+                    <button type="button" id="saveBtn" class="btn btn-primary">Save to my Spotify</button>
+                </div>
             </div>
             <p id="saveStatus" class="status" role="status" aria-live="polite"></p>
+
+            <div id="player" class="player" hidden></div>
+            <ol id="trackList" class="track-list"></ol>
 
             <h2 class="section-title">Playlists that already fit</h2>
             <ul id="existingPlaylistsList" class="playlist-list"></ul>
