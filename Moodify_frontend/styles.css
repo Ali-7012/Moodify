@@ -1,13 +1,409 @@
-@keyframes spin-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+/* Moodify design tokens (see rules.md, section 0) */
+:root {
+    --bg: #0D0F0C;
+    --surface: #161914;
+    --surface-2: #1E221B;
+    --line: #2B3027;
+    --text: #EEF1E8;
+    --muted: #A2A898;
+    --primary: #3BD671;
+    --primary-hover: #5BE38A;
+    --on-primary: #0D0F0C;
+    --danger: #F2836B;
+
+    --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    --radius: 10px;
+    --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+    --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
 }
 
-.animate-spin-slow {
-    animation: spin-slow 6s linear infinite;
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
 }
 
-/* Glossy shine overlay for realistic vinyl look */
+img { display: block; max-width: 100%; }
+
+a { color: inherit; }
+
+button, input { font: inherit; color: inherit; }
+
+:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.muted { color: var(--muted); }
+
+[hidden] { display: none !important; }
+
+/* Top bar */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s5);
+    padding: var(--s4) var(--s5);
+    border-bottom: 1px solid var(--line);
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    text-decoration: none;
+}
+
+.brand-name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+}
+
+/* The one personality detail: a spinning record. It speeds up while music is being found. */
+/* Same build as the original logo: green rim, two grooves, a light reflection and a centre label. */
+.vinyl {
+    position: relative;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid var(--primary);
+    background: #141712;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    animation: spin 6s linear infinite;
+}
+
+.vinyl-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(74, 82, 68, 0.8);
+}
+
+.vinyl-ring-outer { width: 32px; height: 32px; }
+.vinyl-ring-inner { width: 20px; height: 20px; }
+
+/* The reflection turns with the disc, which is what makes the spin visible. */
 .vinyl-shine {
-    background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 50%, rgba(255,255,255,0.1) 100%);
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0.1) 100%);
+    pointer-events: none;
+}
+
+.vinyl-label {
+    position: relative;
+    z-index: 1;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4ADE80;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.is-loading .vinyl { animation-duration: 1.2s; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.quicklinks {
+    display: flex;
+    gap: var(--s5);
+    font-size: 14px;
+}
+
+.quicklinks a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: var(--s1) 0;
+    border-bottom: 1px solid transparent;
+}
+
+.quicklinks a:hover { color: var(--text); border-bottom-color: var(--text); }
+
+.auth { display: flex; align-items: center; }
+
+.user {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    font-size: 14px;
+}
+
+.user-name {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--surface-2);
+    display: grid;
+    place-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.link-button {
+    background: none;
+    border: 0;
+    padding: var(--s1) var(--s2);
+    color: var(--muted);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.link-button:hover { color: var(--text); }
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    min-height: 44px;
+    padding: 0 var(--s5);
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.btn-primary { background: var(--primary); color: var(--on-primary); }
+.btn-primary:not(:disabled):hover { background: var(--primary-hover); }
+
+.btn-ghost { background: transparent; border-color: var(--line); }
+.btn-ghost:hover { background: var(--surface-2); }
+
+/* Main */
+.page {
+    flex: 1;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: var(--s8) var(--s5) var(--s7);
+}
+
+h1, h2 { font-family: var(--font-display); line-height: 1.1; margin: 0; }
+
+h1 {
+    font-size: clamp(36px, 7vw, 56px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.lede {
+    margin: var(--s4) 0 var(--s6);
+    color: var(--muted);
+    font-size: 18px;
+    max-width: 56ch;
+}
+
+.mood-form {
+    display: flex;
+    gap: var(--s3);
+}
+
+.mood-form input {
+    flex: 1;
+    min-width: 0;
+    min-height: 52px;
+    padding: 0 var(--s4);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 17px;
+}
+
+.mood-form input::placeholder { color: #7E8576; }
+
+.mood-form input:focus-visible { outline-offset: 0; border-color: var(--primary); }
+
+.mood-form .btn { min-height: 52px; }
+
+.examples {
+    margin: var(--s4) 0 0;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.example {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 3px;
+}
+
+.example:hover { text-decoration-color: var(--primary); }
+
+.status {
+    min-height: 24px;
+    margin: var(--s4) 0 0;
+    font-size: 15px;
+}
+
+.status:empty { min-height: 0; margin: 0; }
+
+.status.is-error { color: var(--danger); }
+
+.status a { color: var(--primary); font-weight: 600; }
+
+/* Results */
+.results {
+    margin-top: var(--s7);
+    padding-top: var(--s6);
+    border-top: 1px solid var(--line);
+}
+
+.mix {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s5);
+}
+
+.mix h2 { font-size: 28px; font-weight: 700; }
+
+.mix-name { color: var(--primary); }
+
+.mix-text p { margin: var(--s2) 0 0; }
+
+.section-title {
+    margin-top: var(--s7);
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.playlist-list {
+    list-style: none;
+    margin: var(--s4) 0 0;
+    padding: 0;
+}
+
+.playlist {
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+    padding: var(--s3) 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.playlist:last-child { border-bottom: 0; }
+
+.cover {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--surface-2);
+}
+
+.playlist-text { flex: 1; min-width: 0; }
+
+.playlist-name {
+    margin: 0;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.playlist-meta {
+    margin: 2px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.playlist-open {
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    padding: var(--s2) var(--s3);
+    border-radius: var(--radius);
+}
+
+.playlist-open:hover { background: var(--surface-2); }
+
+.empty { padding: var(--s4) 0; color: var(--muted); }
+
+.open-hint {
+    display: block;
+    margin-top: var(--s1);
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.open-hint a { color: var(--primary); }
+
+.foot {
+    padding: var(--s5);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+}
+
+.foot p { margin: 0; }
+
+/* Smaller screens */
+@media (max-width: 760px) {
+    .quicklinks { display: none; }
+    .page { padding-top: var(--s7); }
+}
+
+@media (max-width: 520px) {
+    .topbar { padding: var(--s3) var(--s4); }
+    .page { padding: var(--s6) var(--s4) var(--s7); }
+    .mood-form { flex-direction: column; }
+    .mix { flex-direction: column; align-items: stretch; }
+    .mix h2 { font-size: 24px; }
+    .user-name { max-width: 90px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* The slow logo spin is gentle enough to keep; only the fast loading spin is skipped. */
+    .is-loading .vinyl { animation-duration: 6s; }
 }

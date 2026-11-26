@@ -104,7 +104,7 @@ uvicorn main:app --reload --port 8000
 
 ## Deploy
 
-- **Backend (Render):** root `Moodify_backend`, build `pip install -r requirements.txt`, start `uvicorn main:app --host 0.0.0.0 --port $PORT`. Add the `.env` values as environment variables, with the production redirect URI and frontend URL. Optional: `ALLOWED_ORIGINS` (comma-separated) if the API must accept more origins than `FRONTEND_URL`, `GEMINI_MODEL`, `GEMINI_TIMEOUT_S`.
+- **Backend (Render):** root `Moodify_backend`, build `pip install -r requirements.txt`, start `uvicorn main:app --host 0.0.0.0 --port $PORT`. Add the `.env` values as environment variables, with the production redirect URI and frontend URL. Optional: `ALLOWED_ORIGINS` (comma-separated) if the API must accept more origins than `FRONTEND_URL`, `GEMINI_MODELS` (comma-separated, tried in order), `GEMINI_TIMEOUT_S`.
 - **Frontend (Vercel):** root `Moodify_frontend`, no build command.
 - **Spotify dashboard:** add the production `/callback` URL. While the Spotify app is in Development Mode, only users added to its allowlist can link accounts and save playlists.
 
