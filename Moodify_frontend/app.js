@@ -218,7 +218,6 @@ function renderResults(data) {
         ? `${count} ${count === 1 ? "track" : "tracks"}. Preview them below, or save the mix to Spotify.`
         : "No tracks matched this mood. Try describing it differently.";
 
-    $("copyBtn").disabled = count === 0;
     const saveButton = $("saveBtn");
     saveButton.disabled = count === 0;
     saveButton.textContent = "Save to my Spotify";
@@ -273,6 +272,13 @@ function renderTracks(tracks) {
             }, "Preview");
             previewButton.addEventListener("click", () => showPreview(t.spotify_uri, title, previewButton));
 
+            const copyButton = el("button", {
+                type: "button",
+                class: "link-button track-copy",
+                "aria-label": `Copy link to ${title}`,
+            }, "Copy");
+            copyButton.addEventListener("click", () => copySongLink(link, title, copyButton));
+
             return el("li", { class: "track" },
                 el("span", { class: "track-number", "aria-hidden": "true" }, String(index + 1)),
                 cover,
@@ -280,7 +286,7 @@ function renderTracks(tracks) {
                     name,
                     artist ? el("span", { class: "track-artist" }, artist) : null,
                 ),
-                previewButton,
+                el("div", { class: "track-actions" }, previewButton, link ? copyButton : null),
             );
         });
 
@@ -309,19 +315,10 @@ function showPreview(uri, title, button) {
     player.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
 }
 
-// Works for everyone, including accounts Spotify won't let us save for.
-async function copyTrackLinks() {
-    const links = state.trackUris.map((uri) => trackIdFromUri(uri)).filter(Boolean)
-        .map((id) => `https://open.spotify.com/track/${id}`);
-    if (links.length === 0) {
-        setStatus("saveStatus", "error", "There are no tracks to copy yet.");
-        return;
-    }
-    const text = links.join("\n");
-    let copied = false;
+async function copyText(text) {
     try {
         await navigator.clipboard.writeText(text);
-        copied = true;
+        return true;
     } catch {
         // Older browsers: fall back to a hidden textarea.
         const area = el("textarea", { value: text, readOnly: true });
@@ -329,14 +326,25 @@ async function copyTrackLinks() {
         area.style.opacity = "0";
         document.body.append(area);
         area.select();
-        try { copied = document.execCommand("copy"); } catch { copied = false; }
+        let ok = false;
+        try { ok = document.execCommand("copy"); } catch { ok = false; }
         area.remove();
+        return ok;
     }
+}
+
+// Works for everyone, including accounts Spotify won't let us save for.
+async function copySongLink(link, title, button) {
+    if (!link) return;
+    const copied = await copyText(link);
     if (copied) {
+        button.textContent = "Copied";
+        clearTimeout(button._resetTimer);
+        button._resetTimer = setTimeout(() => { button.textContent = "Copy"; }, 1800);
         setStatus("saveStatus", "info",
-            `Copied ${links.length} song links. In the Spotify desktop app, open or create a playlist and press Ctrl+V (Cmd+V on Mac) to add them all.`);
+            `Copied the link to "${title}". Paste it into a playlist in the Spotify app to add the song.`);
     } else {
-        setStatus("saveStatus", "error", "Your browser blocked copying. Use Preview to listen, or tap a song title to open it in Spotify.");
+        setStatus("saveStatus", "error", "Your browser blocked copying. Tap the song title to open it in Spotify instead.");
     }
 }
 
@@ -530,7 +538,6 @@ function init() {
 
     $("moodForm").addEventListener("submit", generatePlaylist);
     $("saveBtn").addEventListener("click", saveToSpotify);
-    $("copyBtn").addEventListener("click", copyTrackLinks);
     document.addEventListener("click", handleSpotifyLinkClick);
 
     document.querySelectorAll(".example").forEach((button) => {

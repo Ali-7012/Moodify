@@ -306,12 +306,6 @@ h1 {
 
 .mix-text p { margin: var(--s2) 0 0; }
 
-.mix-actions {
-    display: flex;
-    gap: var(--s3);
-    flex-shrink: 0;
-}
-
 .player { margin-top: var(--s5); }
 
 .player iframe {
@@ -385,9 +379,14 @@ a.track-title:hover { text-decoration: underline; }
     color: var(--muted);
 }
 
-.track-preview {
+.track-actions {
+    display: flex;
     flex-shrink: 0;
+}
+
+.track-actions .link-button {
     min-height: 44px;
+    min-width: 44px;
 }
 
 .section-title {
@@ -483,7 +482,6 @@ a.track-title:hover { text-decoration: underline; }
     .page { padding: var(--s6) var(--s4) var(--s7); }
     .mood-form { flex-direction: column; }
     .mix { flex-direction: column; align-items: stretch; }
-    .mix-actions { flex-direction: column-reverse; }
     .mix h2 { font-size: 24px; }
     .user-name { max-width: 90px; }
 }

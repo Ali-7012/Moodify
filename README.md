@@ -5,7 +5,7 @@ Type how you feel, get music that fits. Moodify reads a short mood prompt ("rain
 **Live:** https://moodify-pearl-sigma.vercel.app
 **API:** https://moodify-a605.onrender.com
 
-> **Note:** Saving playlists to Spotify is limited to approved test accounts because of Spotify's Development Mode rules. Anyone can search moods, preview the mix, open playlists, and copy the mix's song links into their own Spotify.
+> **Note:** Saving playlists to Spotify is limited to approved test accounts because of Spotify's Development Mode rules. Anyone can search moods, preview the mix, open playlists, and copy any song's link into their own Spotify.
 
 ---
 
@@ -15,7 +15,7 @@ Type how you feel, get music that fits. Moodify reads a short mood prompt ("rain
 2. **Gemini interprets it.** The backend asks Google Gemini for three things: a short playlist title, a 1-2 word playlist search term, and three track search keywords. If Gemini is slow (over 3.5 s) or fails, a local keyword fallback takes over so the app still answers.
 3. **Spotify is searched** with an app-level token (no login needed): up to 6 public playlists, plus up to 10 unique tracks sorted by popularity.
 4. **You get two results:**
-   - *Your mix*: a titled set of 10 tracks you can preview in Spotify's player, open one by one, or copy as links.
+   - *Your mix*: a titled set of 10 tracks; each one can be previewed in Spotify's player, opened in the app, or its link copied.
    - *Playlists that already fit*: public playlists you can open straight away, in the Spotify app where installed.
 5. **Save to My Spotify.** After linking your account (Spotify OAuth), Moodify creates the playlist in your library and opens it.
 

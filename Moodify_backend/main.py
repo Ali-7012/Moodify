@@ -116,7 +116,7 @@ def spotify_http_error(err: SpotifyException, action: str) -> HTTPException:
             return HTTPException(
                 status_code=403,
                 detail="Saving is limited to Moodify's test accounts by Spotify's rules, and this account "
-                       "isn't one of them yet. You can still preview the tracks or copy their links below.",
+                       "isn't one of them yet. You can still preview the songs below, or copy each one into your own Spotify.",
             )
         return HTTPException(status_code=403, detail=f"Spotify couldn't {action} for this account. Try linking Spotify again.")
     if status == 429:
