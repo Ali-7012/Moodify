@@ -1,9 +1,8 @@
 # Moodify
 
-Type how you feel, get music that fits. Moodify reads a short mood prompt ("rainy evening, a bit nostalgic"), finds public Spotify playlists that match it, and builds a 10-track mix you can save to your own Spotify account in one click.
+Type how you feel, get music that fits. Moodify reads a short mood prompt ("rainy evening, a bit nostalgic"), builds a 10-track mix you can preview right on the page, and finds public Spotify playlists that match it.
 
-**Live:** https://moodify-pearl-sigma.vercel.app
-**API:** https://moodify-a605.onrender.com
+**Try it:** [moodify-pearl-sigma.vercel.app](https://moodify-pearl-sigma.vercel.app)
 
 > **Note:** Saving playlists to Spotify is limited to approved test accounts because of Spotify's Development Mode rules. Anyone can search moods, preview the mix, open playlists, and copy any song's link into their own Spotify.
 
@@ -106,7 +105,7 @@ uvicorn main:app --reload --port 8000
 
 ## Deploy
 
-- **Backend (Render):** root `Moodify_backend`, build `pip install -r requirements.txt`, start `uvicorn main:app --host 0.0.0.0 --port $PORT`. Add the `.env` values as environment variables, with the production redirect URI and frontend URL. Optional: `ALLOWED_ORIGINS` (comma-separated) if the API must accept more origins than `FRONTEND_URL`, `GEMINI_MODELS` (comma-separated, tried in order), `GEMINI_TIMEOUT_S`.
+- **Backend (Render):** currently at `moodify-a605.onrender.com` (its `/` route is a health check for the uptime pinger). Root `Moodify_backend`, build `pip install -r requirements.txt`, start `uvicorn main:app --host 0.0.0.0 --port $PORT`. Add the `.env` values as environment variables, with the production redirect URI and frontend URL. Optional: `ALLOWED_ORIGINS` (comma-separated) if the API must accept more origins than `FRONTEND_URL`, `GEMINI_MODELS` (comma-separated, tried in order), `GEMINI_TIMEOUT_S`.
 - **Frontend (Vercel):** root `Moodify_frontend`, no build command.
 - **Spotify dashboard:** add the production `/callback` URL. While the Spotify app is in Development Mode, only users added to its allowlist can link accounts and save playlists.
 
